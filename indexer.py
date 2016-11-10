@@ -71,7 +71,8 @@ def index(directory, pattern):
             if season not in index:
                 index[season] = {}
 
-            index[season][episode] = os.path.join(dirpath, filename)
+            rel_path = os.path.relpath(dirpath, directory)
+            index[season][episode] = os.path.join(rel_path, filename).split(os.sep)
 
     if "cursor" not in index:
         first_season = min(index.keys())
@@ -144,9 +145,10 @@ def watch(directory, executable):
     with open(index_path, "r") as f:
         index = ast.literal_eval(f.read())
     cursor = index["cursor"]
-    print("Watching", cursor)
     season, episode = cursor
-    subprocess.run([executable, index[season][episode]])
+    path_to_vid = os.path.join(directory, *(index[season][episode]))
+    print("Watching", cursor, "located at", path_to_vid)
+    subprocess.run([executable, path_to_vid])
     apply_next(directory)
 
 if __name__ == "__main__":
