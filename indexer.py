@@ -28,7 +28,7 @@ def main(argv):
     args = parse_args(argv)
     if args.do_index:
         print("Indexing...")
-        index(args.directory, args.pattern.upper())
+        index(args.directory, args.pattern)
 
     if args.next > 0:
         for i in range(args.next):
@@ -46,16 +46,6 @@ def main(argv):
 
 def index(directory, pattern):
     permitted_files = [".avi", ".mp4", ".mkv"]
-    ep_pos = pattern.find("E")
-    s_pos = pattern.find("S")
-
-    if ep_pos == -1 or s_pos == -1:
-        print("No S or E.", file=sys.stderr)
-        sys.exit(1)
-
-    pattern = generate_regexp(pattern)
-    ep_pos = 1 if ep_pos > s_pos else 0
-    s_pos = 1 - ep_pos
 
     index = {}
     index_path = os.path.join(directory, ".index")
@@ -73,10 +63,10 @@ def index(directory, pattern):
                 continue
 
             print(filename)
-            groups = re.match(pattern, filename).groups()
+            groups = re.search(pattern, filename).groups()
             print(groups)
-            season = int(groups[s_pos])
-            episode = int(groups[ep_pos])
+            season = int(groups[0])
+            episode = int(groups[1])
 
             if season not in index:
                 index[season] = {}
@@ -158,13 +148,6 @@ def watch(directory, executable):
     season, episode = cursor
     subprocess.run([executable, index[season][episode]])
     apply_next(directory)
-
-def generate_regexp(pattern):
-    add_paren = re.compile("(E+|S+)")
-    with_paren = add_paren.sub(r"(\1)", pattern)
-
-    replace_digit = re.compile("(E|S)")
-    return ".*" + replace_digit.sub(r"\d", with_paren) + ".*"
 
 if __name__ == "__main__":
     main(sys.argv)
