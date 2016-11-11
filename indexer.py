@@ -1,15 +1,12 @@
 #!/usr/bin/python3
 
-import os
-import re
-import argparse
-import ast
-import subprocess
+import os, re, argparse, json, subprocess
+from collections import defaultdict
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Index series folder')
-    parser.add_argument('directory', metavar='directory', help='Directory')
-    parser.add_argument('-i', '--index', dest='do_index', action='store_true', help='Create index')
+    parser.add_argument('directory', metavar='directory', help='Directory to work on')
+    parser.add_argument('-i', '--index', dest='do_index', action='store_true', help='Create index (APPLIED BEFORE NEXT/BACK)')
     parser.add_argument('-p', '--pattern', nargs='?', help='Pattern for season/episode extraction')
     parser.add_argument('-n', '--next', dest='next', default='0', type=int, help='Move cursor to next episode (APPLIED BEFORE WATCH)')
     parser.add_argument('-b', '--back', dest='back', default='0', type=int, help='Move cursor to previous episode (APPLIED BEFORE WATCH)')
@@ -27,16 +24,13 @@ def parse_args():
 def main():
     args = parse_args()
     if args.do_index:
-        print('Indexing...')
         index(args.directory, args.pattern)
 
-    if args.next > 0:
-        for i in range(args.next):
-            apply_next(args.directory)
+    if args.next:
+        move_cursor(args.directory, args.next)
 
-    if args.back > 0:
-        for i in range(args.back):
-            apply_back(args.directory)
+    if args.back:
+        move_cursor(args.directory, -args.back)
 
     if args.do_watch:
         watch(args.directory, args.executable)
@@ -44,112 +38,93 @@ def main():
     if args.do_show:
         show_cursor(args.directory)
 
+def get_index(directory):
+    index_path = os.path.join(directory, '.index')
+    if os.path.isfile(index_path):
+        with open(index_path, 'r') as f:
+            return json.loads(f.read())
+    else:
+        return {'items': []}
+
+def write_index(index, directory):
+    index_path = os.path.join(directory, '.index')
+    with open(index_path, 'w+') as f:
+        f.write(json.dumps(index))
+
+def season_episode(index, cursor):
+    return index['items'][cursor]['season'], index['items'][cursor]['episode']
+
+def print_cursor(prefix, index):
+    print_season_episode(prefix, season_episode(index, index['cursor']))
+
+def print_season_episode(prefix, season_episode):
+    season, episode = season_episode
+    print(prefix, 'season', season, 'episode', str(episode) + '.')
+
 def index(directory, pattern):
     permitted_files = ['.avi', '.mp4', '.mkv']
 
-    index = {}
-    index_path = os.path.join(directory, '.index')
+    index = get_index(directory)
+    new_index = defaultdict(dict)
 
-    if os.path.isfile(index_path):
-        print('Found index!')
-        with open(index_path, 'r') as f:
-            index = ast.literal_eval(f.read())
+    for episode in index['items']:
+        new_index[episode['season']][episode['episode']] = episode['relpath']
 
-    print(pattern)
+    print('Searching in', directory, 'with', pattern)
 
-    for dirpath, dirnames, filenames in os.walk(directory):
+    for dirpath, _, filenames in os.walk(directory):
         for filename in filenames:
-            if not any([filename.endswith(term) for term in permitted_files]):
+            if not any(filename.endswith(term) for term in permitted_files):
                 continue
 
-            print(filename)
             groups = re.search(pattern, filename).groups()
-            print(groups)
             season = int(groups[0])
             episode = int(groups[1])
-
-            if season not in index:
-                index[season] = {}
+            print_season_episode('Found', (season, episode))
 
             rel_path = os.path.relpath(dirpath, directory)
-            index[season][episode] = os.path.join(rel_path, filename).split(os.sep)
+            new_index[season][episode] = os.path.join(rel_path, filename).split(os.sep)
+
+    flattened = {'items': []}
+    for season in sorted(new_index):
+        for episode in sorted(new_index[season]):
+            flattened['items'].append({'season': season, 'episode': episode, 'relpath': new_index[season][episode]})
+
 
     if 'cursor' not in index:
-        first_season = min(index.keys())
-        first_episode = min(index[first_season].keys())
-        index['cursor'] = (first_season, first_episode)
-
-    with open(index_path, 'w+') as f:
-        f.write(repr(index))
-
-def apply_back(directory):
-    index_path = os.path.join(directory, '.index')
-    with open(index_path, 'r') as f:
-        index = ast.literal_eval(f.read())
-
-    cur_s, cur_ep = index['cursor']
-    poss_ep = [i for i in index[cur_s].keys() if i < cur_ep]
-
-    if len(poss_ep) == 0:
-        if (cur_s - 1) in index:
-            prev_s = cur_s - 1
-            prev_ep = max(index[prev_s].keys())
-        else:
-            prev_s = cur_s
-            prev_ep = cur_ep
+        flattened['cursor'] = 0
     else:
-        prev_s = cur_s
-        prev_ep = max(poss_ep)
+        cursor = index['cursor']
+        ep_details = index['items'][cursor]
+        matches = [i for i,x in enumerate(flattened['items']) if x['season'] == ep_details['season'] and x['episode'] == ep_details['episode']]
+        flattened['cursor'] = matches[0] if matches else 0
 
-    cursor = (prev_s, prev_ep)
-    print('New cursor is', cursor)
-    index['cursor'] = cursor
-    with open(index_path, 'w+') as f:
-        f.write(repr(index))
+    print_cursor('Cursor will be at', flattened)
 
+    write_index(flattened, directory)
 
-def apply_next(directory):
-    index_path = os.path.join(directory, '.index')
-    with open(index_path, 'r') as f:
-        index = ast.literal_eval(f.read())
+def move_cursor(directory, move_increment):
+    index = get_index(directory)
 
-    cur_s, cur_ep = index['cursor']
-    poss_ep = [i for i in index[cur_s].keys() if i > cur_ep]
+    max_cursor = len(index['items']) - 1
 
-    if len(poss_ep) == 0:
-        if (cur_s + 1) in index:
-            next_s = cur_s + 1
-            next_ep = min(index[next_s].keys())
-        else:
-            next_s = cur_s
-            next_ep = cur_ep
-    else:
-        next_s = cur_s
-        next_ep = min(poss_ep)
+    new_cursor = min(max_cursor, max(0, index['cursor'] + move_increment))
 
-    cursor = (next_s, next_ep)
-    print('New cursor is', cursor)
-    index['cursor'] = cursor
-    with open(index_path, 'w+') as f:
-        f.write(repr(index))
+    index['cursor'] = new_cursor
+    write_index(index, directory)
+    print_cursor('New cursor is at', index)
 
 def show_cursor(directory):
-    index_path = os.path.join(directory, '.index')
-    with open(index_path, 'r') as f:
-        index = ast.literal_eval(f.read())
-
-    print('Cursor is', index['cursor'])
+    index = get_index(directory)
+    print_cursor('Cursor is at', index)
 
 def watch(directory, executable):
-    index_path = os.path.join(directory, '.index')
-    with open(index_path, 'r') as f:
-        index = ast.literal_eval(f.read())
-    cursor = index['cursor']
-    season, episode = cursor
-    path_to_vid = os.path.join(directory, *(index[season][episode]))
-    print('Watching', cursor, 'located at', path_to_vid)
+    index = get_index(directory)
+    path_to_vid = os.path.join(directory, *(index['items'][index['cursor']]['relpath']))
+    print_cursor('Watching', index)
+    print('Located at', path_to_vid)
     subprocess.run([executable, path_to_vid])
-    apply_next(directory)
+    move_cursor(directory, 1)
 
 if __name__ == '__main__':
     main()
