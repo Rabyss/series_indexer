@@ -6,31 +6,27 @@ from collections import defaultdict
 def parse_args():
     parser = argparse.ArgumentParser(description='Index series folder')
     parser.add_argument('directory', metavar='directory', help='Directory to work on')
-    parser.add_argument('-i', '--index', dest='do_index', action='store_true', help='Create index (APPLIED BEFORE NEXT/BACK)')
-    parser.add_argument('-p', '--pattern', nargs='?', help='Pattern for season/episode extraction')
-    parser.add_argument('-n', '--next', dest='next', default='0', type=int, help='Move cursor to next episode (APPLIED BEFORE WATCH)')
-    parser.add_argument('-b', '--back', dest='back', default='0', type=int, help='Move cursor to previous episode (APPLIED BEFORE WATCH)')
+    parser.add_argument('-i', '--index', dest='index', help='Create index  with specified season/episode pattern (APPLIED BEFORE NEXT/BACK)')
+    parser.add_argument('-n', '--next', dest='next', default='0', type=int, help='Move cursor to nth next episode (APPLIED BEFORE WATCH)')
+    parser.add_argument('-p', '--prev', dest='prev', default='0', type=int, help='Move cursor to nth previous episode (APPLIED BEFORE WATCH)')
     parser.add_argument('-w', '--watch', dest='do_watch', action='store_true', help='Watch episode then move cursor to next episode')
     parser.add_argument('-s', '--show', dest='do_show', action='store_true', help='Show current episode number')
     parser.add_argument('-e', '--executable', default='mpv', help='Executable to watch')
 
     args = parser.parse_args()
 
-    if args.do_index and args.pattern is None:
-        parser.error('Pattern must be defined in order to index.')
-
     return args
 
 def main():
     args = parse_args()
-    if args.do_index:
-        index(args.directory, args.pattern)
+    if args.index:
+        index(args.directory, args.index)
 
     if args.next:
         move_cursor(args.directory, args.next)
 
-    if args.back:
-        move_cursor(args.directory, -args.back)
+    if args.prev:
+        move_cursor(args.directory, -args.prev)
 
     if args.do_watch:
         watch(args.directory, args.executable)
