@@ -5,7 +5,7 @@ from collections import defaultdict
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Index series folder')
-    parser.add_argument('directory', metavar='directory', help='Directory to work on')
+    parser.add_argument('directory', nargs='?', metavar='directory', help='Directory to work on. Default is current directory.', default=os.getcwd())
     parser.add_argument('-i', '--index', dest='index', help='Create index  with specified season/episode pattern (APPLIED BEFORE NEXT/BACK)')
     parser.add_argument('-n', '--next', dest='next', default='0', type=int, help='Move cursor to nth next episode (APPLIED BEFORE WATCH)')
     parser.add_argument('-p', '--prev', dest='prev', default='0', type=int, help='Move cursor to nth previous episode (APPLIED BEFORE WATCH)')
