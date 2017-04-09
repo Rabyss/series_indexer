@@ -5,12 +5,13 @@ from collections import defaultdict
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Index series folder')
-    parser.add_argument('directory', nargs='?', metavar='directory', help='Directory to work on. Default is current directory.', default=os.getcwd())
+    parser.add_argument('directory', nargs='?', metavar='directory', help='Directory to work on, default is current directory', default=os.getcwd())
     parser.add_argument('-i', '--index', dest='index', help='Create index  with specified season/episode pattern (APPLIED BEFORE NEXT/BACK)')
     parser.add_argument('-n', '--next', dest='next', default='0', type=int, help='Move cursor to nth next episode (APPLIED BEFORE WATCH)')
     parser.add_argument('-p', '--prev', dest='prev', default='0', type=int, help='Move cursor to nth previous episode (APPLIED BEFORE WATCH)')
     parser.add_argument('-w', '--watch', dest='do_watch', action='store_true', help='Watch episode then move cursor to next episode')
     parser.add_argument('-s', '--show', dest='do_show', action='store_true', help='Show current episode number')
+    parser.add_argument('-l', '--list', dest='do_list', action='store_true', help='Lists the indexed episodes')
     parser.add_argument('-e', '--executable', default='mpv', help='Executable to watch')
 
     args = parser.parse_args()
@@ -31,7 +32,10 @@ def main():
     if args.do_watch:
         watch(args.directory, args.executable)
 
-    if args.do_show:
+    if args.do_list:
+        list_episodes(args.directory)
+
+    if args.do_show and not args.do_list:
         show_cursor(args.directory)
 
 def get_index(directory):
@@ -113,6 +117,22 @@ def move_cursor(directory, move_increment):
 def show_cursor(directory):
     index = get_index(directory)
     print_cursor('Cursor is at', index)
+
+def list_episodes(directory):
+    index = get_index(directory)
+    cursor = index["cursor"]
+    current_season = ''
+    print("Episodes in index:")
+    for i, episode in enumerate(index["items"]):
+        output = ''
+        if current_season != episode["season"]:
+            print("Season", episode["season"])
+            current_season = episode["season"]
+        output += 'Episode ' + str(episode["episode"])
+        if cursor == i:
+            output = '>>> ' + output + ' <<<'
+        output = '    ' + output
+        print(output)
 
 def watch(directory, executable):
     index = get_index(directory)
